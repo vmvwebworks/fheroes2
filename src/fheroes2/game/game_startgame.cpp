@@ -905,7 +905,7 @@ fheroes2::GameMode Interface::AdventureMap::StartGame()
                     }
 #endif
 
-                    res = AI::Planner::Get().KingdomTurn( kingdom );
+                    res = AI::Planner::isAgentControlled( playerColor ) ? AI::Planner::Get().AgentKingdomTurn( kingdom ) : AI::Planner::Get().KingdomTurn( kingdom );
                     // This function must return only game state related values.
                     assert( res != fheroes2::GameMode::CANCEL );
 

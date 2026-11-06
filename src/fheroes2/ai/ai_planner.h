@@ -24,6 +24,7 @@
 #include <cassert>
 #include <cstdint>
 #include <set>
+#include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -165,6 +166,10 @@ namespace AI
         // Returns the state of the game. By default it should be end of turn.
         fheroes2::GameMode KingdomTurn( Kingdom & kingdom );
 
+        // External agent support: the turn is driven by commands read from files (see ai_agent.cpp).
+        static bool isAgentControlled( const PlayerColor color );
+        fheroes2::GameMode AgentKingdomTurn( Kingdom & kingdom );
+
         // Implements the logic of transparent casting of the Summon Boat spell at the beginning of the hero's movement
         void HeroesBeginMovement( Heroes & hero );
         // Implements the logic of preparing for digging up of the Ultimate Artifact as well as the logic of transparent
@@ -196,6 +201,8 @@ namespace AI
 
     private:
         Planner() = default;
+
+        std::string agentStateJson( Kingdom & kingdom, const std::string & lastResults, const uint32_t seq );
 
         void CastleTurn( Castle & castle, const bool defensiveStrategy );
 
