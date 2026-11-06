@@ -20,6 +20,7 @@ Todo ocurre en `~/.local/share/fheroes2/agent/`:
 | Archivo | Quién lo escribe | Contenido |
 | --- | --- | --- |
 | `state.json` | el juego | Estado visible del reino: fecha, recursos, ingresos, héroes (estadísticas, ejército, puntos de movimiento), castillos (edificios construidos y construibles con su coste, criaturas disponibles), héroes contratables, objetos visibles con el coste de movimiento desde cada héroe y un mapa ASCII que respeta la niebla de guerra. Incluye `last_results` con el resultado de cada orden anterior y `status` (`waiting_for_commands` u `opponent_turn`). |
+| `brief.txt` | el juego | Resumen compacto en texto (~3 KB) de lo mismo: recursos, héroes, castillos (qué se puede construir/reclutar), taberna, enemigos vistos, los 14 objetos más cercanos por héroe y el resultado de las últimas órdenes. Es lo que el agente debería leer cada turno para gastar pocos tokens; `state.json` queda para el detalle y el mapa ASCII. |
 | `commands.txt` | el agente | Una orden por línea. El juego lo lee, lo borra, ejecuta las órdenes y vuelve a escribir `state.json`. |
 | `seq` | el juego | Contador que aumenta con cada `state.json` nuevo. |
 | `log.txt` | el juego | Histórico de todas las órdenes recibidas. |
@@ -34,6 +35,8 @@ upgrade <castle_x> <castle_y>                # mejora las tropas que se pueda pa
 hire <castle_x> <castle_y> <1|2>             # contrata uno de los dos héroes de la taberna
 take_garrison <castle_x> <castle_y>          # el héroe del castillo se lleva lo mejor de la guarnición
 leave_troop <hero_id> <slot>                 # deja una tropa del héroe en la guarnición
+auto_castles                                 # la IA del juego construye y recluta en todos los castillos
+auto_hero <hero_id>                          # la IA del juego elige objetivo y camina hasta gastar el movimiento
 wait                                         # solo refresca el estado
 end                                          # termina el turno
 ```

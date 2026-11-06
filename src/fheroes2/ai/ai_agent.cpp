@@ -17,6 +17,7 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <deque>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -24,6 +25,7 @@
 
 #include "ai_hero_action.h"
 #include "ai_planner.h"
+#include "ai_planner_internals.h"
 #include "army.h"
 #include "army_troop.h"
 #include "castle.h"
@@ -183,6 +185,46 @@ namespace
         }
         o << "]";
         return o.str();
+    }
+
+
+    // Plain-text results of the previous batch of commands, shown in brief.txt
+    std::string g_briefResults;
+
+    std::string fundsText( const Funds & f )
+    {
+        std::ostringstream o;
+        o << "oro " << f.gold;
+        if ( f.wood ) o << " madera " << f.wood;
+        if ( f.ore ) o << " mineral " << f.ore;
+        if ( f.mercury ) o << " mercurio " << f.mercury;
+        if ( f.sulfur ) o << " azufre " << f.sulfur;
+        if ( f.crystal ) o << " cristal " << f.crystal;
+        if ( f.gems ) o << " gemas " << f.gems;
+        return o.str();
+    }
+
+    std::string armyText( const Army & army )
+    {
+        std::ostringstream o;
+        bool first = true;
+        for ( size_t i = 0; i < army.Size(); ++i ) {
+            const Troop * troop = army.GetTroop( i );
+            if ( troop == nullptr || !troop->isValid() ) {
+                continue;
+            }
+            if ( !first ) {
+                o << ", ";
+            }
+            first = false;
+            o << "s" << i << ":" << troop->GetCount() << " " << safe( troop->GetName() );
+        }
+        return first ? std::string( "(vacio)" ) : o.str();
+    }
+
+    std::string colorOrNeutral( const PlayerColor c )
+    {
+        return c == PlayerColor::NONE ? std::string( "neutral" ) : std::string( colorName( c ) );
     }
 
     const std::array<uint32_t, 12> & castleDwellings()
@@ -512,9 +554,157 @@ std::string AI::Planner::agentStateJson( Kingdom & kingdom, const std::string & 
     }
     o << "],\n";
 
+
+    // Compact text summary (brief.txt): what the agent normally needs, a fraction of state.json
+    {
+        std::ostringstream b;
+        b << "seq " << seq << " | dia " << world.GetDay() << " sem " << world.GetWeek() << " mes " << world.GetMonth() << " | yo=" << colorName( myColor ) << " | mapa "
+          << width << "x" << height << "\n";
+        b << "oro/recursos: " << fundsText( kingdom.GetFunds() ) << " | ingresos/dia: " << fundsText( kingdom.GetIncome() ) << "\n";
+        if ( !g_briefResults.empty() ) {
+            b << "ULTIMAS ORDENES:\n" << g_briefResults;
+        }
+        b << "HEROES:\n";
+        for ( Heroes * hero : kingdom.GetHeroes() ) {
+            if ( hero == nullptr || !hero->isActive() ) {
+                continue;
+            }
+            const Castle * inCastle = hero->inCastle();
+            b << " H" << hero->GetID() << " " << safe( hero->GetName().c_str() ) << " (" << hero->GetCenter().x << "," << hero->GetCenter().y << ") mov " << hero->GetMovePoints() << "/"
+              << hero->GetMaxMovePoints() << " niv" << hero->GetLevel() << " A" << hero->GetAttack() << " D" << hero->GetDefense() << " P" << hero->GetPower() << " K"
+              << hero->GetKnowledge() << " fuerza " << static_cast<int64_t>( hero->GetArmy().GetStrength() ) << ( inCastle ? " [en castillo]" : "" )
+              << ( hero->Modes( Heroes::PATROL ) ? " [patrulla]" : "" ) << "\n   " << armyText( hero->GetArmy() ) << "\n";
+        }
+        b << "CASTILLOS:\n";
+        for ( Castle * castle : kingdom.GetCastles() ) {
+            if ( castle == nullptr ) {
+                continue;
+            }
+            b << " " << safe( castle->GetName().c_str() ) << " (" << castle->GetCenter().x << "," << castle->GetCenter().y << ") " << Race::String( castle->GetRace() )
+              << ( castle->isCastle() ? "" : " [solo torre]" ) << ( castle->Modes( Castle::ALLOW_TO_BUILD_TODAY ) ? "" : " [ya construido hoy]" );
+            if ( castle->GetHero() ) {
+                b << " huesped=H" << castle->GetHero()->GetID();
+            }
+            b << "\n   guarnicion: " << armyText( castle->GetArmy() ) << "\n   construible ahora:";
+            bool any = false;
+            for ( int bit = 0; bit < 32; ++bit ) {
+                const uint32_t building = 1U << bit;
+                if ( castle->isBuild( building ) || castle->CheckBuyBuilding( building ) != BuildingStatus::ALLOW_BUILD ) {
+                    continue;
+                }
+                any = true;
+                b << " " << building << ":" << safe( Castle::GetStringBuilding( building, castle->GetRace() ) ) << "(" << fundsText( BuildingInfo::GetCost( building, castle->GetRace() ) ) << ")";
+            }
+            if ( !any ) {
+                b << " nada";
+            }
+            b << "\n   reclutable:";
+            any = false;
+            for ( const uint32_t dwelling : castleDwellings() ) {
+                if ( !castle->isBuild( dwelling ) ) {
+                    continue;
+                }
+                const Monster monster( castle->GetRace(), castle->GetActualDwelling( dwelling ) );
+                const uint32_t avail = castle->getMonstersInDwelling( dwelling );
+                if ( !monster.isValid() || avail == 0 ) {
+                    continue;
+                }
+                any = true;
+                b << " " << dwelling << ":" << safe( monster.GetName() ) << " " << avail << " disp (puedo pagar " << castle->getRecruitLimit( monster, kingdom.GetFunds() ) << ")";
+            }
+            if ( !any ) {
+                b << " nada";
+            }
+            b << "\n";
+        }
+        {
+            const Recruits & recruits = kingdom.GetRecruits();
+            const Heroes * candidates[2] = { recruits.GetHero1(), recruits.GetHero2() };
+            b << "TABERNA:";
+            for ( int i = 0; i < 2; ++i ) {
+                if ( candidates[i] ) {
+                    b << " [" << ( i + 1 ) << "] " << safe( candidates[i]->GetName().c_str() ) << " " << Race::String( candidates[i]->GetRace() ) << " A" << candidates[i]->GetAttack()
+                      << " D" << candidates[i]->GetDefense() << " P" << candidates[i]->GetPower() << " K" << candidates[i]->GetKnowledge();
+                }
+            }
+            b << "\n";
+        }
+
+        auto describe = [&]( const size_t i ) {
+            const int32_t idx = objectTiles[i];
+            const Maps::Tile & tile = world.getTile( idx );
+            const MP2::MapObjectType type = tile.getMainObjectType();
+            const fheroes2::Point pt = Maps::GetPoint( idx );
+            std::ostringstream d;
+            d << "(" << pt.x << "," << pt.y << ") " << safe( MP2::StringObject( type ) );
+            if ( type == MP2::OBJ_MONSTER ) {
+                d << " " << Maps::getMonsterCountFromTile( tile ) << " " << safe( Maps::getMonsterFromTile( tile ).GetName() ) << " fuerza " << static_cast<int64_t>( getTileArmyStrength( tile ) );
+            }
+            else if ( type == MP2::OBJ_HERO ) {
+                if ( const Heroes * other = tile.getHero() ) {
+                    d << " " << safe( other->GetName().c_str() ) << " " << colorName( other->GetColor() ) << " fuerza " << static_cast<int64_t>( other->GetArmy().GetStrength() );
+                }
+            }
+            else if ( type == MP2::OBJ_CASTLE ) {
+                if ( const Castle * castle = world.getCastleEntrance( pt ) ) {
+                    d << " " << safe( castle->GetName().c_str() ) << " " << colorName( castle->GetColor() );
+                }
+            }
+            else if ( MP2::isCaptureObject( type ) ) {
+                d << " dueno=" << colorOrNeutral( Maps::getColorFromTile( tile ) );
+            }
+            return d.str();
+        };
+
+        auto isMine = [&]( const size_t i ) {
+            const Maps::Tile & tile = world.getTile( objectTiles[i] );
+            const MP2::MapObjectType type = tile.getMainObjectType();
+            if ( type == MP2::OBJ_HERO ) {
+                const Heroes * other = tile.getHero();
+                return other != nullptr && other->GetColor() == myColor;
+            }
+            if ( type == MP2::OBJ_CASTLE ) {
+                const Castle * castle = world.getCastleEntrance( Maps::GetPoint( objectTiles[i] ) );
+                return castle != nullptr && castle->GetColor() == myColor;
+            }
+            if ( MP2::isCaptureObject( type ) ) {
+                return Maps::getColorFromTile( tile ) == myColor;
+            }
+            return false;
+        };
+
+        b << "ENEMIGOS VISTOS:";
+        bool anyEnemy = false;
+        for ( size_t i = 0; i < objectTiles.size(); ++i ) {
+            const MP2::MapObjectType type = world.getTile( objectTiles[i] ).getMainObjectType();
+            if ( ( type == MP2::OBJ_HERO || type == MP2::OBJ_CASTLE ) && !isMine( i ) ) {
+                anyEnemy = true;
+                b << "\n " << describe( i );
+            }
+        }
+        b << ( anyEnemy ? "\n" : " ninguno\n" );
+
+        for ( size_t h = 0; h < heroDistances.size(); ++h ) {
+            std::vector<std::pair<uint32_t, size_t>> reachable;
+            for ( size_t i = 0; i < objectTiles.size(); ++i ) {
+                const uint32_t d = heroDistances[h].second[i];
+                if ( d > 0 && !isMine( i ) ) {
+                    reachable.emplace_back( d, i );
+                }
+            }
+            std::sort( reachable.begin(), reachable.end() );
+            b << "CERCA DE H" << heroDistances[h].first << " (coste de movimiento, 14 mas cercanos alcanzables):\n";
+            for ( size_t k = 0; k < reachable.size() && k < 14; ++k ) {
+                b << "  " << reachable[k].first << ": " << describe( reachable[k].second ) << "\n";
+            }
+        }
+        b << "(mapa ASCII y todo lo demas: state.json). Ordenes: auto_castles | auto_hero <id> | move | build | recruit | upgrade | hire | take_garrison | leave_troop | end\n";
+        writeFileAtomic( agentPath( "brief.txt" ), b.str() );
+    }
+
     o << "\"commands_help\":[\"move <hero_id> <x> <y>\",\"build <castle_x> <castle_y> <building_id>\",\"recruit <castle_x> <castle_y> <dwelling_id> <count|max>\","
          "\"upgrade <castle_x> <castle_y>\",\"hire <castle_x> <castle_y> <1|2>\",\"take_garrison <castle_x> <castle_y>\",\"leave_troop <hero_id> <slot>\","
-         "\"wait\",\"end\"]\n";
+         "\"auto_castles\",\"auto_hero <hero_id> (the game AI picks the target and walks)\",\"wait\",\"end\"]\n";
     o << "}\n";
     return o.str();
 }
@@ -597,8 +787,10 @@ fheroes2::GameMode AI::Planner::AgentKingdomTurn( Kingdom & kingdom )
         results << "[";
         bool firstResult = true;
         bool endTurn = false;
+        std::string plainResults;
 
-        auto report = [&results, &firstResult]( const std::string & command, const bool ok, const std::string & detail ) {
+        auto report = [&results, &firstResult, &plainResults]( const std::string & command, const bool ok, const std::string & detail ) {
+            plainResults += ( ok ? " ok  " : " FALLO " ) + command + " -> " + detail.substr( 0, 220 ) + "\n";
             if ( !firstResult ) {
                 results << ",";
             }
@@ -606,10 +798,18 @@ fheroes2::GameMode AI::Planner::AgentKingdomTurn( Kingdom & kingdom )
             results << "\n  {\"command\":" << esc( command ) << ",\"ok\":" << ( ok ? "true" : "false" ) << ",\"detail\":" << esc( detail ) << "}";
         };
 
-        std::istringstream lines( commands );
+        std::deque<std::string> pending;
+        {
+            std::istringstream lines( commands );
+            std::string l;
+            while ( std::getline( lines, l ) ) {
+                pending.push_back( l );
+            }
+        }
         std::string line;
-        while ( std::getline( lines, line ) ) {
-            line = trim( line );
+        while ( !pending.empty() ) {
+            line = trim( pending.front() );
+            pending.pop_front();
             if ( line.empty() || line[0] == '#' ) {
                 continue;
             }
@@ -624,6 +824,62 @@ fheroes2::GameMode AI::Planner::AgentKingdomTurn( Kingdom & kingdom )
                 endTurn = true;
                 report( line, true, "turn ended" );
                 break;
+            }
+
+            if ( cmd == "auto_castles" ) {
+                int touched = 0;
+                for ( Castle * castle : kingdom.GetCastles() ) {
+                    if ( castle == nullptr ) {
+                        continue;
+                    }
+                    CastleTurn( *castle, false );
+                    ++touched;
+                }
+                report( line, true, "la IA del juego ha gestionado " + std::to_string( touched ) + " castillo(s) (construir/reclutar). Mira brief.txt para ver el resultado" );
+                continue;
+            }
+
+            if ( cmd == "auto_hero" ) {
+                int id = -1;
+                int budget = 8;
+                args >> id >> budget;
+                Heroes * hero = findHero( kingdom, id );
+                if ( hero == nullptr ) {
+                    report( line, false, "no such hero" );
+                    continue;
+                }
+                if ( budget <= 0 ) {
+                    report( line, true, "limite de pasos alcanzado" );
+                    continue;
+                }
+                if ( !hero->MayStillMove( false, false ) ) {
+                    report( line, true, "el heroe no tiene movimiento" );
+                    continue;
+                }
+                int target = -1;
+                {
+                    const AIWorldPathfinderStateRestorer restorer( _pathfinder );
+                    static const std::vector<std::pair<double, double>> configs{ { ARMY_ADVANTAGE_LARGE, 0.5 }, { ARMY_ADVANTAGE_MEDIUM, 0.25 }, { ARMY_ADVANTAGE_SMALL, 0.0 } };
+                    for ( const auto & [advantage, reserve] : configs ) {
+                        _pathfinder.setMinimalArmyStrengthAdvantage( advantage );
+                        _pathfinder.setSpellPointsReserveRatio( reserve );
+                        _pathfinder.reEvaluateIfNeeded( *hero );
+                        double priority = 0;
+                        target = getPriorityTarget( *hero, priority );
+                        if ( target != -1 ) {
+                            break;
+                        }
+                    }
+                }
+                if ( target == -1 ) {
+                    report( line, true, "no encuentra nada util que hacer (heroe quieto)" );
+                    continue;
+                }
+                const fheroes2::Point pt = Maps::GetPoint( target );
+                report( line, true, "elige ir a " + std::to_string( pt.x ) + "," + std::to_string( pt.y ) + " (" + safe( MP2::StringObject( world.getTile( target ).getMainObjectType() ) ) + ")" );
+                pending.push_front( "auto_hero " + std::to_string( id ) + " " + std::to_string( budget - 1 ) );
+                pending.push_front( "move " + std::to_string( id ) + " " + std::to_string( pt.x ) + " " + std::to_string( pt.y ) );
+                continue;
             }
 
             if ( cmd == "wait" ) {
@@ -892,6 +1148,7 @@ fheroes2::GameMode AI::Planner::AgentKingdomTurn( Kingdom & kingdom )
 
         results << "\n ]";
         lastResults = results.str();
+        g_briefResults = plainResults;
 
         if ( endTurn ) {
             break;
