@@ -1176,14 +1176,22 @@ fheroes2::GameMode Interface::AdventureMap::HumanTurn( const bool isLoadedFromSa
                 else if ( HotKeyPressEvent( Game::HotKeyEvent::WORLD_DIG_ARTIFACT ) ) {
                     res = EventDigArtifact();
                 }
-                else if ( HotKeyPressEvent( Game::HotKeyEvent::WORLD_CHEAT_BLACK_DRAGONS ) ) {
-                    if ( Heroes * hero = GetFocusHeroes() ) {
-                        hero->GetArmy().JoinTroop( Monster( Monster::BLACK_DRAGON ), 10, true );
+                else if ( HotKeyPressEvent( Game::HotKeyEvent::WORLD_CHEAT_BLACK_DRAGONS ) || HotKeyPressEvent( Game::HotKeyEvent::WORLD_CHEAT_TITANS ) ) {
+                    // Developer cheats: add 10 Black Dragons or 10 Titans to the selected hero.
+                    Heroes * hero = GetFocusHeroes();
+                    if ( hero == nullptr ) {
+                        fheroes2::showStandardTextMessage( "", _( "Select a hero first." ), Dialog::OK );
                     }
-                }
-                else if ( HotKeyPressEvent( Game::HotKeyEvent::WORLD_CHEAT_TITANS ) ) {
-                    if ( Heroes * hero = GetFocusHeroes() ) {
-                        hero->GetArmy().JoinTroop( Monster( Monster::TITAN ), 10, true );
+                    else {
+                        const Monster monster( HotKeyPressEvent( Game::HotKeyEvent::WORLD_CHEAT_TITANS ) ? Monster::TITAN : Monster::BLACK_DRAGON );
+                        if ( hero->GetArmy().JoinTroop( monster, 10, false ) ) {
+                            // Show the new army in the status panel and refresh the hero portrait right away.
+                            _statusPanel.SetState( StatusType::STATUS_ARMY );
+                            setRedraw( REDRAW_HEROES | REDRAW_STATUS );
+                        }
+                        else {
+                            fheroes2::showStandardTextMessage( "", _( "The hero's army is full." ), Dialog::OK );
+                        }
                     }
                 }
                 else if ( HotKeyPressEvent( Game::HotKeyEvent::WORLD_SLEEP_HERO ) ) {

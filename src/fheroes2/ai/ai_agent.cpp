@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <deque>
@@ -766,13 +767,26 @@ fheroes2::GameMode AI::Planner::AgentKingdomTurn( Kingdom & kingdom )
         writeFileAtomic( statePath, agentStateJson( kingdom, lastResults, seq ) );
 
         // Wait for commands while keeping the window responsive.
+        // A batch is taken once it is complete: it ends with a newline, or its content has not changed for a while
+        // (protects against reading a file that is still being written).
         std::string commands;
+        std::string previousRead;
+        auto previousReadTime = std::chrono::steady_clock::now();
         while ( true ) {
             if ( !le.HandleEvents( true, true ) ) {
                 return fheroes2::GameMode::QUIT_GAME;
             }
             commands = readFile( commandsPath );
-            if ( !commands.empty() ) {
+            if ( commands.empty() ) {
+                previousRead.clear();
+                continue;
+            }
+            const auto now = std::chrono::steady_clock::now();
+            if ( commands != previousRead ) {
+                previousRead = commands;
+                previousReadTime = now;
+            }
+            if ( commands.back() == '\n' || now - previousReadTime > std::chrono::milliseconds( 800 ) ) {
                 std::remove( commandsPath.c_str() );
                 break;
             }
@@ -804,6 +818,31 @@ fheroes2::GameMode AI::Planner::AgentKingdomTurn( Kingdom & kingdom )
             std::string l;
             while ( std::getline( lines, l ) ) {
                 pending.push_back( l );
+            }
+        }
+
+        // Optional guard: a batch may start with "seq <n>", where n is the seq of the state.json it answers.
+        // A batch written for another seq (for example, an old file delivered late) is ignored entirely.
+        {
+            auto first = std::find_if( pending.begin(), pending.end(), []( const std::string & l ) {
+                const std::string t = trim( l );
+                return !t.empty() && t[0] != '#';
+            } );
+            if ( first != pending.end() ) {
+                std::istringstream firstArgs( trim( *first ) );
+                std::string word;
+                firstArgs >> word;
+                if ( word == "seq" ) {
+                    uint32_t batchSeq = 0;
+                    firstArgs >> batchSeq;
+                    const std::string seqLine = trim( *first );
+                    pending.erase( first );
+                    if ( batchSeq != seq ) {
+                        report( seqLine, false,
+                                "lote ignorado: estaba escrito para seq " + std::to_string( batchSeq ) + " y el estado actual es seq " + std::to_string( seq ) );
+                        pending.clear();
+                    }
+                }
             }
         }
         std::string line;

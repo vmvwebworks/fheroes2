@@ -43,6 +43,20 @@ end                                          # termina el turno
 
 Las líneas que empiezan por `#` se ignoran.
 
+Conviene empezar cada lote con `seq <n>`, donde `n` es el `seq` del `state.json`/`brief.txt` que se está
+respondiendo. Si el número no coincide (por ejemplo, un archivo antiguo que llega tarde), el juego ignora el
+lote entero y lo indica en `last_results`. El juego tampoco lee un `commands.txt` a medio escribir: lo toma
+cuando termina en salto de línea o cuando lleva un momento sin cambiar.
+
+## Trucos (rama de pruebas)
+
+En el mapa de aventura, con un héroe seleccionado:
+
+- `B`: añade 10 Dragones Negros a su ejército.
+- `G`: añade 10 Titanes.
+
+Se apilan con una tropa igual si ya la tiene; si el ejército está lleno, el juego avisa.
+
 ## Limitaciones
 
 - Los combates los resuelve la IA táctica del juego; el agente decide cuándo y contra quién luchar.
