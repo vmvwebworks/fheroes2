@@ -1181,6 +1181,11 @@ fheroes2::GameMode Interface::AdventureMap::HumanTurn( const bool isLoadedFromSa
                         hero->GetArmy().JoinTroop( Monster( Monster::BLACK_DRAGON ), 10, true );
                     }
                 }
+                else if ( HotKeyPressEvent( Game::HotKeyEvent::WORLD_CHEAT_TITANS ) ) {
+                    if ( Heroes * hero = GetFocusHeroes() ) {
+                        hero->GetArmy().JoinTroop( Monster( Monster::TITAN ), 10, true );
+                    }
+                }
                 else if ( HotKeyPressEvent( Game::HotKeyEvent::WORLD_SLEEP_HERO ) ) {
                     EventSwitchHeroSleeping();
                 }
