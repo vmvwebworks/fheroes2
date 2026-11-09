@@ -250,6 +250,8 @@ namespace
             = { Game::HotKeyCategory::WORLD_MAP, gettext_noop( "hotkey|dig for artifact" ), fheroes2::Key::KEY_D };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::WORLD_VIEW_WORLD )]
             = { Game::HotKeyCategory::WORLD_MAP, gettext_noop( "hotkey|view world" ), fheroes2::Key::KEY_V };
+        hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::WORLD_CHEAT_BLACK_DRAGONS )]
+            = { Game::HotKeyCategory::WORLD_MAP, gettext_noop( "hotkey|cheat: add black dragons" ), fheroes2::Key::KEY_F12 };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::WORLD_KINGDOM_SUMMARY )]
             = { Game::HotKeyCategory::WORLD_MAP, gettext_noop( "hotkey|kingdom summary" ), fheroes2::Key::KEY_K };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::WORLD_DEFAULT_ACTION )]

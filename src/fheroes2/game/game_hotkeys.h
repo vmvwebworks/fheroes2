@@ -138,6 +138,8 @@ namespace Game
         WORLD_SCROLL_DOWN,
         //
         WORLD_TOGGLE_CONTROL_PANEL,
+        // Developer cheat: adds 10 Black Dragons to the selected hero.
+        WORLD_CHEAT_BLACK_DRAGONS,
         WORLD_TOGGLE_RADAR,
         WORLD_TOGGLE_BUTTONS,
         WORLD_TOGGLE_STATUS,
