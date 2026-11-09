@@ -251,9 +251,9 @@ namespace
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::WORLD_VIEW_WORLD )]
             = { Game::HotKeyCategory::WORLD_MAP, gettext_noop( "hotkey|view world" ), fheroes2::Key::KEY_V };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::WORLD_CHEAT_BLACK_DRAGONS )]
-            = { Game::HotKeyCategory::WORLD_MAP, gettext_noop( "hotkey|cheat: add black dragons" ), fheroes2::Key::KEY_F12 };
+            = { Game::HotKeyCategory::WORLD_MAP, gettext_noop( "hotkey|cheat: add black dragons" ), fheroes2::Key::KEY_B };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::WORLD_CHEAT_TITANS )]
-            = { Game::HotKeyCategory::WORLD_MAP, gettext_noop( "hotkey|cheat: add titans" ), fheroes2::Key::KEY_F11 };
+            = { Game::HotKeyCategory::WORLD_MAP, gettext_noop( "hotkey|cheat: add titans" ), fheroes2::Key::KEY_G };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::WORLD_KINGDOM_SUMMARY )]
             = { Game::HotKeyCategory::WORLD_MAP, gettext_noop( "hotkey|kingdom summary" ), fheroes2::Key::KEY_K };
         hotKeyEventInfo[hotKeyEventToInt( Game::HotKeyEvent::WORLD_DEFAULT_ACTION )]
